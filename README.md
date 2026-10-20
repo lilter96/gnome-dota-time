@@ -130,8 +130,9 @@ real session.
 
 - The UI is in Russian only.
 - Tested with one Steam account on GNOME 46 under X11.
-- Real GSI posts have been seen from the menu and the demo hero. A live ranked
-  match has so far been checked only with synthetic posts shaped like Dota's.
+- Real GSI posts have been seen from the menu, the demo hero and a ranked match.
+  That match came out exactly as OpenDota has it: hero, K/D/A, result and
+  duration to the second. Bot lobbies and other modes have not been seen yet.
 - Days before the install are a lower bound; see [Comparisons](#comparisons).
 
 A sibling of [gnome-headphones-battery](https://github.com/lilter96/gnome-headphones-battery):
