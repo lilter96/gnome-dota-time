@@ -1,0 +1,7 @@
+{
+  "uuid": "dt-media@local",
+  "name": "dota-time media driver",
+  "description": "Drives dota-time inside a throwaway headless shell, see tools/media/capture.sh.",
+  "shell-version": ["46"],
+  "session-modes": ["user"]
+}

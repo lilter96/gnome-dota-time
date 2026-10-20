@@ -1,0 +1,19 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  gjs:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install gjs
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gjs gir1.2-glib-2.0
+      - name: Check metadata
+        run: python3 -c "import json; m = json.load(open('dota-time@terentiy/metadata.json')); assert m['uuid'] == 'dota-time@terentiy'"
+      - name: Unit tests
+        run: gjs -m tests/run.js
+      - name: Roshan renders
+        run: gjs -m tools/frames.js /tmp/frames.png 1 && gjs -m tools/glyph.js /tmp/glyph.png

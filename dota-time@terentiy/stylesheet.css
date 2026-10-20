@@ -1,0 +1,283 @@
+/* Panel: Roshan's head and today's time. */
+
+.dt-panel-box {
+  spacing: 5px;
+}
+
+.dt-panel-time {
+  font-feature-settings: "tnum";
+}
+
+.dt-panel-time.dt-panel-aggro {
+  color: #ff6961;
+}
+
+/* Popup: a graphite card, Apple-like, independent of the shell theme. */
+
+.popup-menu.dt-menu .popup-menu-content {
+  background-color: rgba(29, 30, 37, 0.985);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 26px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
+  padding: 12px 10px 10px;
+}
+
+.dt-card {
+  width: 324px;
+  font-family: "Inter", "Ubuntu Sans", sans-serif;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.dt-time {
+  font-family: "Inter Display", "Inter", sans-serif;
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.6px;
+  font-feature-settings: "tnum";
+  color: #ffffff;
+  margin-top: 2px;
+}
+
+.dt-status {
+  font-size: 12px;
+  color: rgba(235, 235, 245, 0.6);
+  margin-top: 2px;
+}
+
+.dt-status.dt-status-grumpy {
+  color: #ffb340;
+}
+
+.dt-status.dt-status-aggro {
+  color: #ff6961;
+  font-weight: 600;
+}
+
+/* "В матче · Pudge · 23:14 · 7/2/9" */
+
+.dt-live {
+  margin-top: 10px;
+  padding: 4px 11px 4px 9px;
+  spacing: 7px;
+  border-radius: 999px;
+  background-color: rgba(48, 209, 88, 0.14);
+}
+
+.dt-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 4px;
+  background-color: #30d158;
+}
+
+.dt-live-text {
+  font-size: 12px;
+  font-weight: 600;
+  font-feature-settings: "tnum";
+  color: #4ade80;
+}
+
+/* Sections share one look: a soft grey slab. */
+
+.dt-today,
+.dt-chart-box {
+  background-color: rgba(255, 255, 255, 0.065);
+  border-radius: 16px;
+  margin: 12px 4px 0;
+}
+
+.dt-today {
+  padding: 10px 12px 11px;
+  spacing: 8px;
+}
+
+.dt-today {
+  margin-top: 16px;
+}
+
+.dt-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.dt-section-right {
+  font-size: 12px;
+  font-feature-settings: "tnum";
+  color: rgba(235, 235, 245, 0.55);
+}
+
+/* Segmented control, the macOS kind. */
+
+.dt-chart-box {
+  padding: 10px 12px 8px;
+}
+
+.dt-seg {
+  background-color: rgba(118, 118, 128, 0.24);
+  border-radius: 9px;
+  padding: 2px;
+  margin-bottom: 10px;
+}
+
+.dt-seg-pill {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 7px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.dt-seg-btn {
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(235, 235, 245, 0.62);
+  padding: 4px 0;
+  border-radius: 7px;
+  background: none;
+  transition-duration: 160ms;
+}
+
+.dt-seg-btn:hover {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.dt-seg-btn:checked {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.dt-seg-btn:focus {
+  box-shadow: inset 0 0 0 2px rgba(10, 132, 255, 0.7);
+}
+
+.dt-chart-caption {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(235, 235, 245, 0.5);
+}
+
+.dt-chart-value {
+  font-family: "Inter Display", "Inter", sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  font-feature-settings: "tnum";
+  color: #ffffff;
+}
+
+
+.dt-chip {
+  font-size: 11px;
+  font-weight: 600;
+  font-feature-settings: "tnum";
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: rgba(235, 235, 245, 0.75);
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.dt-chip.dt-chip-red {
+  color: #ff6961;
+  background-color: rgba(255, 69, 58, 0.16);
+}
+
+.dt-chip.dt-chip-green {
+  color: #4ade80;
+  background-color: rgba(48, 209, 88, 0.16);
+}
+
+.dt-chart {
+  margin-top: 8px;
+}
+
+/* Comparisons: four tiles, Fitness-style. */
+
+.dt-tiles {
+  margin: 10px 4px 0;
+  spacing: 8px;
+}
+
+.dt-tiles-row {
+  spacing: 8px;
+}
+
+.dt-tile {
+  background-color: rgba(255, 255, 255, 0.065);
+  border-radius: 14px;
+  padding: 9px 12px 10px;
+}
+
+.dt-tile-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(235, 235, 245, 0.55);
+}
+
+.dt-tile-value {
+  font-family: "Inter Display", "Inter", sans-serif;
+  font-size: 17px;
+  font-weight: 600;
+  font-feature-settings: "tnum";
+  color: #ffffff;
+  margin-top: 2px;
+}
+
+.dt-tile-value.dt-tone-red {
+  color: #ff6961;
+}
+
+.dt-tile-value.dt-tone-green {
+  color: #4ade80;
+}
+
+.dt-tile-sub {
+  font-size: 11px;
+  font-feature-settings: "tnum";
+  color: rgba(235, 235, 245, 0.42);
+  margin-top: 1px;
+}
+
+/* Setting up live matches. */
+
+.dt-tip {
+  margin: 10px 4px 0;
+  padding: 9px 10px 9px 12px;
+  spacing: 10px;
+  border-radius: 14px;
+  background-color: rgba(10, 132, 255, 0.1);
+}
+
+.dt-tip-text {
+  font-size: 11px;
+  color: rgba(235, 235, 245, 0.7);
+}
+
+.dt-tip-btn {
+  font-size: 12px;
+  font-weight: 600;
+  color: #ffffff;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background-color: #0a84ff;
+  transition-duration: 160ms;
+}
+
+.dt-tip-btn:hover {
+  background-color: #2b95ff;
+}
+
+.dt-tip-btn:checked {
+  background-color: rgba(48, 209, 88, 0.85);
+}
+
+.dt-tip-btn:focus {
+  box-shadow: 0 0 0 2px rgba(10, 132, 255, 0.45);
+}
+
+.dt-note {
+  font-size: 11px;
+  color: rgba(235, 235, 245, 0.4);
+  margin: 8px 14px 0;
+}
+
+
+
