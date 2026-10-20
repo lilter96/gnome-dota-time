@@ -57,6 +57,9 @@ export class Ledger {
             .sort((a, b) => a[0] - b[0]);
         this.imported = {...data.imported};
         this.matches = new Map(Object.entries(data.matches ?? {}));
+        // The first game day known in full. From it on a day is all your time
+        // in Dota; before it, only the match clocks OpenDota knows.
+        this.since = typeof data.since === 'string' ? data.since : null;
         this.open = false;
     }
 
@@ -65,6 +68,7 @@ export class Ledger {
             segs: this.segs,
             imported: this.imported,
             matches: Object.fromEntries(this.matches),
+            since: this.since,
         };
     }
 
@@ -171,6 +175,9 @@ export class Ledger {
             tracked,
             unseen,
             total: tracked + unseen,
+            // the game clock only, from the horn: what every day has, old or new
+            matchTime: matches.reduce((sum, m) => sum + (m.d ?? 0), 0),
+            full: this.since !== null && key >= this.since,
             estimated: unseen > 60,
             matches,
             wins,
@@ -206,37 +213,45 @@ export class Ledger {
 
     // --- comparisons ----------------------------------------------------------
 
+    // Comparisons put like against like: whole days once enough of them are
+    // known in full, the match clock on both sides until then. `by` says which.
     stats(now) {
         const today = dayKey(now);
         const t = this.day(today, now);
         const past = this.series(addDays(today, -1), 56);
-        const played = past.filter(d => d.total >= 60);
-        const recent = played.slice(-28);
-        const usual = recent.length >= 3 ? median(recent.map(d => d.total)) : null;
+
+        let usual = null;
+        const fullDays = past.filter(d => d.full && d.total >= 60).slice(-28);
+        const matchDays = past.filter(d => d.matchTime >= 60).slice(-28);
+        if (t.full && fullDays.length >= 3)
+            usual = {by: 'total', value: median(fullDays.map(d => d.total)), today: t.total};
+        else if (matchDays.length >= 3)
+            usual = {by: 'matches', value: median(matchDays.map(d => d.matchTime)), today: t.matchTime};
 
         const week = this.series(today, 7, now);
         const prevWeek = this.series(addDays(today, -7), 7);
-        const sum = xs => xs.reduce((s, d) => s + d.total, 0);
-        const weekSum = sum(week), prevSum = sum(prevWeek);
+        const by = prevWeek.every(d => d.full) ? 'total' : 'matches';
+        const sum = xs => xs.reduce((s, d) => s + (by === 'total' ? d.total : d.matchTime), 0);
+        const knownSince = this.firstDay;
 
         const month = this.series(today, 30, now);
         const aggro = d => d.total >= AGGRO_HOURS * 3600;
 
-        // days in a row under four hours since anything is known
-        const knownSince = this.firstDay;
+        // Days in a row under four hours. Only full days can say so: one known by
+        // its matches alone may have had four hours of Dota around them.
         let calm = 0;
-        for (let i = past.length - 1; i >= 0; i--) {
-            if (aggro(past[i]) || knownSince === null || past[i].key < knownSince)
-                break;
+        for (let i = past.length - 1; i >= 0 && past[i].full && !aggro(past[i]); i--)
             calm++;
-        }
 
         return {
             today: t,
             usual,
-            week: {sum: weekSum, prev: prevSum, prevKnown: knownSince !== null && knownSince <= prevWeek[0].key},
+            week: {by, sum: sum(week), prev: sum(prevWeek), prevKnown: knownSince !== null && knownSince <= prevWeek[0].key},
+            // days known by their matches alone are a lower bound: counts can only grow
             aggroWeek: week.filter(aggro).length,
+            aggroWeekAtLeast: week.some(d => !d.full && !aggro(d)),
             aggroMonth: month.filter(aggro).length,
+            aggroMonthAtLeast: month.some(d => !d.full && !aggro(d)),
             calmStreak: aggro(t) ? 0 : calm,
             winrate: this.winrateByOrder(),
         };
@@ -259,9 +274,9 @@ export class Ledger {
         return first;
     }
 
-    // Win rate of the first three matches of a day against the rest, shrunk
-    // towards your overall rate so that a handful of games cannot shout.
-    winrateByOrder(prior = 8, minEach = 8) {
+    // Win rate of the first three matches of a day against the rest, and how
+    // likely a gap this size is by chance alone (Fisher's exact test).
+    winrateByOrder(minEach = 8) {
         const byDay = new Map();
         for (const m of this.matches.values()) {
             if (m.w !== 0 && m.w !== 1)
@@ -283,16 +298,41 @@ export class Ledger {
         const n = early.n + late.n;
         if (!n)
             return null;
-        const p0 = (early.w + late.w) / n;
-        const shrink = g => (g.w + prior * p0) / (g.n + prior);
+        const rate = g => g.n ? g.w / g.n : null;
+        const p = fisher(early.w, early.n, late.w, late.n);
         return {
             n,
-            overall: p0,
-            early: {...early, rate: shrink(early)},
-            late: {...late, rate: shrink(late)},
+            overall: (early.w + late.w) / n,
+            early: {...early, rate: rate(early)},
+            late: {...late, rate: rate(late)},
+            p,
+            real: p < 0.05,
             enough: early.n >= minEach && late.n >= minEach,
         };
     }
+}
+
+// Two-sided Fisher's exact test: the chance that wins split between a group of
+// `an` games and one of `bn` at least as unevenly as aw/an against bw/bn, if
+// both groups win equally often.
+export function fisher(aw, an, bw, bn) {
+    const n = an + bn, w = aw + bw;
+    if (!an || !bn)
+        return 1;
+    const lf = [0];
+    for (let i = 1; i <= n; i++)
+        lf.push(lf[i - 1] + Math.log(i));
+    // P(the first group won k), the totals fixed
+    const prob = k => Math.exp(lf[w] - lf[k] - lf[w - k] + lf[n - w] - lf[an - k] - lf[bn - w + k] -
+        lf[n] + lf[an] + lf[bn]);
+    const seen = prob(aw);
+    let p = 0;
+    for (let k = Math.max(0, w - bn); k <= Math.min(an, w); k++) {
+        const pk = prob(k);
+        if (pk <= seen * (1 + 1e-7))
+            p += pk;
+    }
+    return Math.min(1, p);
 }
 
 // --- formatting -----------------------------------------------------------------

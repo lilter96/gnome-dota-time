@@ -92,7 +92,7 @@ function demoLedger(now, today) {
     const R = rng(7);
     const L = new Ledger();
     const key = dayKey(now);
-    const installed = addDays(key, -11);
+    const installed = addDays(key, -14);
     let id = 8000000000;
     const hoursFor = [1.4, 2.6, 0, 3.2, 4.7, 2.1, 0.9, 2.4, 3.6, 0, 1.8, 2.9, 4.3, 1.1, 2.2,
         0, 3.0, 2.5, 1.6, 0, 3.4, 2.7, 4.4, 1.9, 0.8, 2.3, 3.1, 0, 2.0, 1.5];
@@ -126,6 +126,7 @@ function demoLedger(now, today) {
     for (const [start, minutes] of today)
         play(key, start, minutes, true);
     L.segs.sort((a, b) => a[0] - b[0]);
+    L.since = installed;
     return L;
 }
 
@@ -189,7 +190,7 @@ export default class Media extends Extension {
             const L = demoLedger(now, sc.today);
             models[k] = demoModel(L, now, sc);
             log(`${k}: today=${formatClock(models[k].today.total)} matches=${models[k].today.matches.length} ` +
-                `week=${formatClock(models[k].stats.week.sum)} usual=${formatClock(models[k].stats.usual ?? 0)}`);
+                `week=${formatClock(models[k].stats.week.sum)} usual=${formatClock(models[k].stats.usual?.value ?? 0)}(${models[k].stats.usual?.by})`);
         }
         // fetch the portraits first
         for (const id of HEROES)
@@ -267,6 +268,10 @@ export default class Media extends Extension {
             await sleep(1000);
         log(`backfill ok=${!!me._state.od.backfillOk} after ${Math.round((now() - t0) / 1000)} s, ` +
             `matches=${me._ledger.matches.size} odError=${me._odError}`);
+        const st = me._ledger.stats(Date.now() / 1000);
+        log(`since=${me._ledger.since} usual=${JSON.stringify(st.usual)} week=${JSON.stringify(st.week)} ` +
+            `aggro=${st.aggroWeek}${st.aggroWeekAtLeast ? '+' : ''}/${st.aggroMonth}${st.aggroMonthAtLeast ? '+' : ''} ` +
+            `winrate=${st.winrate ? `${st.winrate.early.w}/${st.winrate.early.n} ${st.winrate.late.w}/${st.winrate.late.n} p=${st.winrate.p.toFixed(3)}` : 'none'}`);
         await shot('panel', rectOf(ind, 10));
         ind.menu.open();
         await sleep(2500);

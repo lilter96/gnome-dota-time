@@ -67,6 +67,8 @@ export default class DotaTimeExtension extends Extension {
         this._ledger = new Ledger(saved?.ledger);
         if (!saved)
             this._importOld(GLib.build_filenamev([stateDir, 'history.json']));
+        // today began before we did; tomorrow is the first day seen whole
+        this._ledger.since ??= addDays(dayKey(wallClock()), 1);
 
         this._game = new GameState(this._state.token);
         this._gsiMode = null;

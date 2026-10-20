@@ -1,5 +1,5 @@
 import {
-    AFK_LIMIT, Ledger, addDays, dayKey, dayStart, formatClock, formatDuration, importHistory, plural,
+    AFK_LIMIT, Ledger, addDays, dayKey, dayStart, fisher, formatClock, formatDuration, importHistory, plural,
 } from '../dota-time@terentiy/ledger.js';
 import {assert, deepEqual, equal, near, test} from './harness.js';
 
@@ -108,13 +108,16 @@ test('today stops at now', () => {
 
 test('stats: usual day, week against week, aggro days, calm streak', () => {
     const l = new Ledger();
+    l.since = '2026-10-01';
     // two weeks: 2 h a day, except one 5-hour day
     for (let d = 5; d <= 18; d++)
         playFor(l, at(d, 18), d === 15 ? 5 * 3600 : 2 * 3600);
     playFor(l, at(20, 18), 3600);
     const s = l.stats(at(20, 20));
-    equal(s.usual, 2 * 3600);
+    deepEqual(s.usual, {by: 'total', value: 2 * 3600, today: 3600});
+    equal(s.week.by, 'total');
     equal(s.aggroWeek, 1);
+    assert(!s.aggroWeekAtLeast);
     equal(s.calmStreak, 4, 'the 16th, 17th, 18th and the empty 19th');
     equal(s.today.total, 3600);
     assert(s.week.prevKnown);
@@ -123,7 +126,47 @@ test('stats: usual day, week against week, aggro days, calm streak', () => {
     equal(s.week.prev, 14 * 3600);
 });
 
-test('win rate of the first three matches against the rest is shrunk', () => {
+test('days known only by their matches are compared by the match clock', () => {
+    const l = new Ledger();
+    // history from OpenDota: two 40-minute matches a day
+    let id = 1;
+    for (let d = 6; d <= 19; d++) {
+        for (const h of [18, 19])
+            l.addMatch({id: String(id++), t: at(d, h), d: 2400, w: 1, src: 'od'});
+    }
+    // today in full: an hour of menu and queue around one 40-minute match
+    l.since = '2026-10-20';
+    playFor(l, at(20, 18), 3600);
+    l.addMatch({id: String(id++), t: at(20, 18, 10), d: 2400, w: 0, src: 'gsi'});
+    const s = l.stats(at(20, 20));
+    equal(s.today.total, 3600);
+    equal(s.today.matchTime, 2400);
+    deepEqual(s.usual, {by: 'matches', value: 4800, today: 2400}, 'not 3600 against 4800');
+    equal(s.week.by, 'matches');
+    equal(s.week.sum, 13 * 2400);
+    equal(s.week.prev, 14 * 2400);
+    equal(s.calmStreak, 0, 'a day known by its matches says nothing about four hours');
+    assert(s.aggroWeekAtLeast && s.aggroMonthAtLeast);
+
+    // three full days later the whole time is compared
+    for (const d of [21, 22, 23])
+        playFor(l, at(d, 18), 2 * 3600);
+    playFor(l, at(24, 18), 3 * 3600);
+    const later = l.stats(at(24, 22));
+    deepEqual(later.usual, {by: 'total', value: 2 * 3600, today: 3 * 3600});
+    equal(later.calmStreak, 4, 'the 20th to the 23rd');
+});
+
+test('Fisher’s exact test matches the textbook values', () => {
+    // reference values from exact binomial coefficients
+    near(fisher(32, 71, 24, 44), 0.343648, 1e-6);
+    near(fisher(3, 8, 7, 8), 0.118881, 1e-6);
+    equal(fisher(5, 10, 5, 10), 1);
+    assert(fisher(18, 18, 0, 18) < 1e-9);
+    equal(fisher(0, 0, 3, 5), 1);
+});
+
+test('win rate of the first three matches against the rest, with its p-value', () => {
     const l = new Ledger();
     let id = 1;
     for (let d = 1; d <= 6; d++) {
@@ -134,10 +177,25 @@ test('win rate of the first three matches against the rest is shrunk', () => {
     equal(w.n, 36);
     equal(w.early.n, 18);
     near(w.overall, 0.5, 1e-9);
-    // raw 100% and 0%, pulled towards 50% by eight imaginary games
-    near(w.early.rate, (18 + 4) / 26, 1e-9);
-    near(w.late.rate, 4 / 26, 1e-9);
-    assert(w.enough);
+    equal(w.early.rate, 1);
+    equal(w.late.rate, 0);
+    assert(w.enough && w.real);
+
+    // 32 of 71 against 24 of 44, as in real life: a gap chance explains
+    const r = new Ledger();
+    let k = 1;
+    const day = (d, results) => results.forEach((x, i) => r.addMatch({id: String(k++), t: at(d, 12 + i), d: 2400, w: x, src: 'od'}));
+    const games = [...Array(32).fill(1), ...Array(39).fill(0)];
+    const later = [...Array(24).fill(1), ...Array(20).fill(0)];
+    for (let d = 0; d < 24; d++) {
+        const first = games.splice(0, 3);
+        if (first.length)
+            day(1 + d, [...first, ...later.splice(0, 2)]);
+    }
+    const g = r.winrateByOrder();
+    deepEqual([g.early.w, g.early.n, g.late.w, g.late.n], [32, 71, 24, 44]);
+    near(g.p, 0.343648, 1e-6);
+    assert(!g.real);
 });
 
 test('the ledger survives a round trip through JSON', () => {

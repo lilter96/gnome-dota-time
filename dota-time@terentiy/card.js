@@ -342,7 +342,8 @@ class Card extends St.BoxLayout {
         return {
             bars: days.map((d, i) => ({
                 v: hours[i],
-                ghost: prev ? prev[i].total / 3600 : 0,
+                // a day seen whole against one known by its matches alone would look like growth
+                ghost: prev && (prev[i].full || !d.full) ? prev[i].total / 3600 : 0,
                 est: d.estimated,
                 color: this._barColor(hours[i]),
                 strong: i === days.length - 1,
@@ -411,34 +412,47 @@ class Card extends St.BoxLayout {
         const m = this._model, s = m.stats, [usual, week, aggro, fourth] = this._tiles;
         const signed = d => `${d > 0 ? '+' : '−'}${formatDuration(Math.abs(d))}`;
 
-        if (s.usual === null)
+        // `by` matches: the days compared are known only by their match clocks,
+        // so today is counted the same way
+        const u = s.usual;
+        if (u === null)
             usual.set('Обычный день', '—', 'нужно 3 игровых дня');
-        else if (m.today.total < 60)
-            usual.set('Обычный день', formatDuration(s.usual), 'медиана игровых дней');
-        else if (Math.abs(m.today.total - s.usual) < 5 * 60)
-            usual.set('К обычному дню', 'как обычно', `обычно ${formatDuration(s.usual)}`);
+        else if (u.today < 60)
+            usual.set(u.by === 'total' ? 'Обычный день' : 'Обычно в матчах', formatDuration(u.value), 'медиана игровых дней');
+        else if (Math.abs(u.today - u.value) < 5 * 60)
+            usual.set(u.by === 'total' ? 'К обычному дню' : 'День в матчах', 'как обычно', `обычно ${formatDuration(u.value)}`);
         else
-            usual.set('К обычному дню', signed(m.today.total - s.usual), `обычно ${formatDuration(s.usual)}`,
-                m.today.total > s.usual ? 'red' : 'green');
+            usual.set(u.by === 'total' ? 'К обычному дню' : 'День в матчах', signed(u.today - u.value),
+                `обычно ${formatDuration(u.value)}`, u.today > u.value ? 'red' : 'green');
 
         const p = s.week.prevKnown ? percentChange(s.week.sum, s.week.prev) : null;
+        const weekLabel = s.week.by === 'total' ? 'Неделя к прошлой' : 'Неделя в матчах';
         if (p === null)
-            week.set('Неделя', formatDuration(s.week.sum), 'прошлой ещё нет');
+            week.set(weekLabel, formatDuration(s.week.sum), 'прошлой ещё нет');
         else
-            week.set('Неделя к прошлой', p === 0 ? 'так же' : `${p > 0 ? '↑' : '↓'} ${Math.abs(p)}%`,
+            week.set(weekLabel, p === 0 ? 'так же' : `${p > 0 ? '↑' : '↓'} ${Math.abs(p)}%`,
                 `было ${formatDuration(s.week.prev)}`, p > 5 ? 'red' : p < -5 ? 'green' : '');
 
+        // a day known by its matches alone can only turn out longer: counts are a minimum
         const streak = s.calmStreak;
-        aggro.set('Дни в агре', `${s.aggroWeek} из 7`,
-            streak > 1 ? `спокойно ${streak} ${plural(streak, 'день', 'дня', 'дней')} подряд` : `за 30 дней: ${s.aggroMonth}`,
-            s.aggroWeek > 0 ? 'red' : 'green');
+        let aggroSub;
+        if (s.aggroWeekAtLeast)
+            aggroSub = 'минимум: дни по матчам';
+        else if (streak > 1)
+            aggroSub = `спокойно ${streak} ${plural(streak, 'день', 'дня', 'дней')} подряд`;
+        else
+            aggroSub = `за 30 дней: ${s.aggroMonthAtLeast ? 'минимум ' : ''}${s.aggroMonth}`;
+        aggro.set('Дни в агре', `${s.aggroWeek} из 7`, aggroSub, s.aggroWeek > 0 ? 'red' : 'green');
 
         const w = s.winrate;
-        if (w?.enough) {
-            const pc = x => `${Math.round(x * 100)}%`;
+        const pc = x => `${Math.round(x * 100)}%`;
+        if (w?.enough && w.real) {
             const drop = w.late.rate - w.early.rate;
             fourth.set('Винрейт за день', `${pc(w.early.rate)} → ${pc(w.late.rate)}`, 'первые 3 игры → дальше',
-                drop < -0.04 ? 'red' : drop > 0.04 ? 'green' : '');
+                drop < 0 ? 'red' : 'green');
+        } else if (w?.enough) {
+            // the gap is what chance alone gives often enough: say so, no colour
+            fourth.set('Винрейт за день', 'разницы нет', `${pc(w.early.rate)} → ${pc(w.late.rate)}, это шум`);
         } else {
             const ms = m.week.flatMap(d => d.matches);
             const wins = ms.filter(x => x.w === 1).length, losses = ms.filter(x => x.w === 0).length;
