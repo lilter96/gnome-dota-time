@@ -11,7 +11,7 @@ import {heroKey} from './heroes.js';
 
 Gio._promisify(Soup.Session.prototype, 'send_and_read_async');
 Gio._promisify(Gio.File.prototype, 'load_contents_async');
-Gio._promisify(Gio.File.prototype, 'replace_contents_async');
+Gio._promisify(Gio.File.prototype, 'replace_contents_bytes_async', 'replace_contents_finish');
 Gio._promisify(Gio.Subprocess.prototype, 'communicate_utf8_async');
 
 const STEAM_ROOTS = ['.steam/steam', '.local/share/Steam', '.var/app/com.valvesoftware.Steam/.local/share/Steam'];
@@ -210,7 +210,7 @@ export async function installConfig(cfgDir, port, token) {
     const file = dir.get_child(CFG_NAME);
     const text = configText(port, token);
     if (await readText(file.get_path()) !== text) {
-        await file.replace_contents_async(new TextEncoder().encode(text), null, false,
+        await file.replace_contents_bytes_async(new GLib.Bytes(new TextEncoder().encode(text)), null, false,
             Gio.FileCreateFlags.REPLACE_DESTINATION, null);
     }
     return file.get_path();
@@ -260,10 +260,10 @@ export class Web {
 
 // Hero portraits from the Steam CDN, cached on disk, loaded once per session.
 export class Portraits {
-    constructor(web, onLoaded) {
+    constructor(web, onLoaded, dir = GLib.build_filenamev([GLib.get_user_cache_dir(), 'dota-time', 'heroes'])) {
         this._web = web;
         this._onLoaded = onLoaded;
-        this._dir = GLib.build_filenamev([GLib.get_user_cache_dir(), 'dota-time', 'heroes']);
+        this._dir = dir;
         this._surfaces = new Map();
         this._pending = new Set();
         this._retryAt = new Map();
@@ -277,14 +277,15 @@ export class Portraits {
             return this._surfaces.get(key);
         const file = GLib.build_filenamev([this._dir, `${key}.png`]);
         if (exists(file)) {
-            let surf = null;
             try {
-                surf = Cairo.ImageSurface.createFromPNG(file);
+                const surf = Cairo.ImageSurface.createFromPNG(file);
+                this._surfaces.set(key, surf);
+                return surf;
             } catch (e) {
+                // cut short by a crash or a full disk: fetch it again
                 console.debug(`dota-time: bad portrait ${file}: ${e.message}`);
+                GLib.unlink(file);
             }
-            this._surfaces.set(key, surf);
-            return surf;
         }
         this._fetch(key, file);
         return null;
@@ -298,8 +299,13 @@ export class Portraits {
         try {
             const data = await this._web.get(PORTRAIT(key));
             GLib.mkdir_with_parents(this._dir, 0o755);
-            await Gio.File.new_for_path(file).replace_contents_async(data, null, false,
+            // Written aside and renamed: the file appears whole or not at all.
+            // A live match repaints every frame, and half a PNG read once
+            // would leave the tile grey.
+            const part = Gio.File.new_for_path(`${file}.part`);
+            await part.replace_contents_bytes_async(new GLib.Bytes(data), null, false,
                 Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+            part.move(Gio.File.new_for_path(file), Gio.FileCopyFlags.OVERWRITE, null, null);
             this._onLoaded();
         } catch (e) {
             this._retryAt.set(key, now + 600);
