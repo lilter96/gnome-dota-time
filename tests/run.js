@@ -4,5 +4,6 @@ import {run} from './harness.js';
 import './ledger.test.js';
 import './gsi.test.js';
 import './roshan.test.js';
+import './watcher.test.js';
 
 System.exit(await run() ? 1 : 0);

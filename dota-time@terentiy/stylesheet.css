@@ -77,6 +77,20 @@
   color: #4ade80;
 }
 
+/* The demo hero, bots, custom games: not a match. */
+
+.dt-live.dt-live-practice {
+  background-color: rgba(100, 210, 255, 0.12);
+}
+
+.dt-live-practice .dt-live-dot {
+  background-color: #64d2ff;
+}
+
+.dt-live-practice .dt-live-text {
+  color: #64d2ff;
+}
+
 /* Sections share one look: a soft grey slab. */
 
 .dt-today,

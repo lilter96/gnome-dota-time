@@ -29,6 +29,7 @@ const REFRESH_EVERY = 30 * 60;      // ask OpenDota to look for new matches at m
 
 const wallClock = () => Date.now() / 1000;
 const cancelled = e => e?.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED);
+const liveKind = live => live ? (live.practice ? 'practice' : 'match') : 'none';
 
 const Indicator = GObject.registerClass(
 class Indicator extends PanelMenu.Button {
@@ -59,6 +60,7 @@ export default class DotaTimeExtension extends Extension {
             token: saved?.token ?? GLib.uuid_string_random().replace(/-/g, ''),
             accountId: saved?.accountId ?? null,
             gsiSeen: saved?.gsiSeen ?? false,
+            gsiFlag: saved?.gsiFlag ?? null,        // did Dota last start with -gamestateintegration
             notified: saved?.notified ?? null,      // the day the aggro notification went out
             od: {recentAt: 0, backfillAt: 0, backfillOk: 0, refreshAt: 0, ...saved?.od},
         };
@@ -67,6 +69,7 @@ export default class DotaTimeExtension extends Extension {
             this._importOld(GLib.build_filenamev([stateDir, 'history.json']));
 
         this._game = new GameState(this._state.token);
+        this._gsiMode = null;
         this._timers = new Map();
         this._odBusy = false;
         this._odError = false;
@@ -97,6 +100,7 @@ export default class DotaTimeExtension extends Extension {
 
         this._watcher = new DotaWatcher(running => this._onRunning(running));
         this._indicator.glyph.stillWhen = () => this._watcher?.gaming ?? false;
+        this._checkFlag();
 
         try {
             this._gsi = new GsiServer(GSI_PORT, body => this._onPost(body));
@@ -166,6 +170,7 @@ export default class DotaTimeExtension extends Extension {
 
     _tick() {
         this._watcher.poll();
+        this._checkFlag();
         this._track();
         this._sinceSave += TICK;
         if (this._sinceSave >= SAVE_EVERY && this._watcher.running)
@@ -173,7 +178,17 @@ export default class DotaTimeExtension extends Extension {
         this._refresh();
     }
 
+    _checkFlag() {
+        const flag = this._watcher.gsiFlag;
+        if (flag === null || flag === this._state.gsiFlag)
+            return;
+        this._state.gsiFlag = flag;
+        this._save();
+        this._refresh();
+    }
+
     _onRunning(running) {
+        this._checkFlag();
         this._track();
         this._refresh();
         if (!running) {
@@ -188,17 +203,21 @@ export default class DotaTimeExtension extends Extension {
         if (!this._game)
             return;
         const now = wallClock();
-        const wasLive = this._game.inMatch(now);
+        const was = liveKind(this._live(now));
         const events = this._game.feed(body, now);
         if (events === null)
             return;
+        if (this._game.mode !== this._gsiMode) {
+            this._gsiMode = this._game.mode;
+            console.log(`[${this.uuid}] GSI: ${this._gsiMode}`);
+        }
         if (!this._state.gsiSeen) {
             this._state.gsiSeen = true;
             this._save();
         }
         if (this._game.accountId)
             this._state.accountId = this._game.accountId;
-        let changed = wasLive !== this._game.inMatch(now);
+        let changed = was !== liveKind(this._live(now));
         for (const e of events) {
             if (e.type === 'end') {
                 this._ledger.addMatch(e.match);
@@ -220,7 +239,7 @@ export default class DotaTimeExtension extends Extension {
     }
 
     _live(now) {
-        return this._game.inMatch(now) ? this._game.live : null;
+        return this._game.current(now);
     }
 
     // --- OpenDota --------------------------------------------------------------
@@ -317,7 +336,7 @@ export default class DotaTimeExtension extends Extension {
             prevWeek: this._ledger.series(addDays(key, -7), 7),
             month: this._ledger.series(key, 30, now),
             stats,
-            gsi: {seen: this._state.gsiSeen, listening: !!this._gsi},
+            gsi: {seen: this._state.gsiSeen, flag: this._state.gsiFlag, listening: !!this._gsi},
             odError: this._odError,
         };
     }

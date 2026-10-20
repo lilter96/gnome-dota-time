@@ -47,6 +47,15 @@ function commOf(pid) {
     }
 }
 
+function argsOf(pid) {
+    try {
+        const [ok, bytes] = GLib.file_get_contents(`/proc/${pid}/cmdline`);
+        return ok ? decoder.decode(bytes).split('\0').filter(Boolean) : [];
+    } catch {
+        return [];
+    }
+}
+
 function isDota(win) {
     const cls = (win.get_wm_class() ?? '').toLowerCase();
     return cls === 'dota2' || cls === 'steam_app_570' || commOf(win.get_pid()) === 'dota2';
@@ -56,13 +65,18 @@ function isDota(win) {
 // before the first window and after the last one.
 export class DotaWatcher {
     constructor(onChange) {
-        this._onChange = onChange;
+        // Dota already open is where we start, not a change: the caller reads
+        // `running` once it holds the watcher.
+        this._onChange = () => {};
         this._windows = new Map();   // MetaWindow -> unmanaged handler id
         this._pid = 0;
         this._running = false;
+        this._flagPid = 0;
+        this._flag = false;
         this._createdId = global.display.connect('window-created', (_d, win) => this._consider(win));
         for (const actor of global.get_window_actors())
             this._consider(actor.meta_window);
+        this._onChange = onChange;
         this._cancellable = new Gio.Cancellable();
         this._probe();
     }
@@ -110,6 +124,18 @@ export class DotaWatcher {
                 return true;
         }
         return false;
+    }
+
+    // Was this Dota started with -gamestateintegration? Its posts only come
+    // during a match, so the menu alone can't tell. null while Dota is closed.
+    get gsiFlag() {
+        if (!this.running || commOf(this._pid) !== 'dota2')
+            return null;
+        if (this._flagPid !== this._pid) {
+            this._flagPid = this._pid;
+            this._flag = argsOf(this._pid).includes('-gamestateintegration');
+        }
+        return this._flag;
     }
 
     poll() {

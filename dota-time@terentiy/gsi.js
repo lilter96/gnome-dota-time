@@ -55,6 +55,7 @@ export class GameState {
         this.accountId = null;
         this._ended = new Set();
         this._roshan = null;
+        this.mode = 'none';     // for the log: Dota's fields differ between modes
     }
 
     // A post from Dota. Returns a list of events:
@@ -73,16 +74,29 @@ export class GameState {
         const team = player.team_name;
         const playing = !!id && id !== '0' && (team === 'radiant' || team === 'dire') &&
             !map.customgamename;
+        const state = map?.game_state;
+        const hid = heroId(hero.id > 0 ? hero.id : hero.name);
         if (!playing) {
-            this.live = null;
             this._roshan = null;
+            // the demo hero, bots, custom games: shown, never counted as a match
+            this.live = map && hid && state !== POST_GAME ? {
+                id: null,
+                practice: true,
+                state,
+                hero: hid,
+                clock: map.clock_time ?? 0,
+                k: player.kills ?? 0,
+                x: player.deaths ?? 0,
+                a: player.assists ?? 0,
+                at: now,
+            } : null;
+            this.mode = `${this.live ? 'practice' : 'idle'} (${describe(map, team, hid)})`;
             return events;
         }
+        this.mode = 'match';
 
-        const state = map.game_state;
         if (this.live?.id !== id && IN_MATCH.has(state))
             events.push({type: 'start', id});
-        const hid = heroId(hero.id > 0 ? hero.id : hero.name);
         this.live = IN_MATCH.has(state) || state === POST_GAME ? {
             id,
             state,
@@ -123,15 +137,31 @@ export class GameState {
         return events;
     }
 
-    // In a match according to a recent post.
+    // In a real match according to a recent post.
     inMatch(now) {
-        return !!this.live && IN_MATCH.has(this.live.state) && now - this.lastPost < FRESH;
+        return !!this.live && !this.live.practice && IN_MATCH.has(this.live.state) &&
+            now - this.lastPost < FRESH;
+    }
+
+    // What to show as going on right now: a match or practice, or null.
+    current(now) {
+        if (!this.live || now - this.lastPost >= FRESH)
+            return null;
+        return this.live.practice || IN_MATCH.has(this.live.state) ? this.live : null;
     }
 
     // Dota has talked to us lately (it is running with the launch option).
     connected(now) {
         return now - this.lastPost < FRESH;
     }
+}
+
+function describe(map, team, hid) {
+    if (!map)
+        return 'menu';
+    const id = map.matchid && String(map.matchid) !== '0' ? 'set' : 'none';
+    return `map ${map.name ?? '?'}, custom ${map.customgamename || 'none'}, match id ${id}, ` +
+        `team ${team ?? 'none'}, hero ${hid ? 'set' : 'none'}, ${map.game_state ?? '?'}`;
 }
 
 // A match row from OpenDota's /players/{id}/recentMatches or /matches.

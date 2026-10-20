@@ -180,7 +180,7 @@ class Card extends St.BoxLayout {
 
     // The popup is closed: keep only Roshan's mood current.
     idle({hours, running, live}) {
-        this.roshan.update({hours, awake: running, inMatch: !!live});
+        this.roshan.update({hours, awake: running, inMatch: !!live && !live.practice});
     }
 
     // A live update from Dota while the popup is open.
@@ -200,7 +200,7 @@ class Card extends St.BoxLayout {
         const old = this._model;
         this._model = model;
         const hours = model.today.total / 3600;
-        this.roshan.update({hours, awake: model.running, inMatch: !!model.live});
+        this.roshan.update({hours, awake: model.running, inMatch: !!model.live && !model.live.practice});
         if (old && moodFor(old.today.total / 3600) !== moodFor(hours))
             this.hero.wake();
         if (old && old.running !== model.running)
@@ -258,7 +258,11 @@ class Card extends St.BoxLayout {
         this._live.visible = !!live;
         if (!live)
             return;
-        const parts = ['В матче'];
+        if (live.practice)
+            this._live.add_style_class_name('dt-live-practice');
+        else
+            this._live.remove_style_class_name('dt-live-practice');
+        const parts = [live.practice ? 'Тренировка' : 'В матче'];
         if (live.hero)
             parts.push(heroName(live.hero));
         if (live.clock > 0) {
@@ -274,7 +278,7 @@ class Card extends St.BoxLayout {
         if (!m)
             return;
         const list = m.today.matches.map(x => ({h: x.h, w: x.w, d: x.d, k: x.k, x: x.x, a: x.a}));
-        if (m.live && !list.some(x => x.live) && !m.today.matches.some(x => x.id === m.live.id))
+        if (m.live && !m.live.practice && !list.some(x => x.live) && !m.today.matches.some(x => x.id === m.live.id))
             list.push({h: m.live.hero, w: undefined, live: true});
         this._todayBox.visible = list.length > 0;
         this._strip.show(list);
@@ -433,7 +437,8 @@ class Card extends St.BoxLayout {
 
     _syncNote() {
         const m = this._model;
-        this._tip.visible = !m.gsi.seen && m.gsi.listening;
+        // the flag is what Dota was last started with; a post settles it when the flag is unknown
+        this._tip.visible = m.gsi.listening && (m.gsi.flag === false || (m.gsi.flag === null && !m.gsi.seen));
         if (this._tip.visible) {
             this._tipText.text = 'Живые матчи: добавь \u2011gamestateintegration в параметры запуска Dota 2';
             if (!this._copy.has_style_pseudo_class('checked'))

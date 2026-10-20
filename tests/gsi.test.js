@@ -45,11 +45,35 @@ test('spectating, the menu and custom games are not matches', () => {
     const g = new GameState(TOKEN);
     deepEqual(g.feed({auth: {token: TOKEN}, player: {activity: 'menu'}}, 10), []);
     equal(g.live, null);
-    deepEqual(g.feed(post('DOTA_GAMERULES_STATE_GAME_IN_PROGRESS', {player: {team_name: undefined}}), 20), []);
+    equal(g.mode, 'idle (menu)');
+    // a spectator gets every player and hero, keyed by team
+    const watching = post('DOTA_GAMERULES_STATE_GAME_IN_PROGRESS');
+    watching.player = {team2: {player0: {kills: 1}}};
+    watching.hero = {team2: {player0: {id: 14}}};
+    deepEqual(g.feed(watching, 20), []);
+    equal(g.current(20), null);
     deepEqual(g.feed(post('DOTA_GAMERULES_STATE_GAME_IN_PROGRESS', {map: {customgamename: 'overthrow'}}), 30), []);
     assert(!g.inMatch(30));
     assert(g.connected(30), 'but Dota is talking to us');
     assert(!g.connected(100));
+});
+
+test('the demo hero and bots show as practice, never as a match', () => {
+    const g = new GameState(TOKEN);
+    const demo = {map: {matchid: '0', customgamename: 'hero_demo', clock_time: 75}, player: {kills: 2}};
+    deepEqual(g.feed(post('DOTA_GAMERULES_STATE_GAME_IN_PROGRESS', demo), 100), []);
+    assert(!g.inMatch(100), 'AFK still counts in practice');
+    const live = g.current(100);
+    equal(live?.practice, true);
+    equal(live.hero, 14);
+    equal(live.clock, 75);
+    equal(live.k, 2);
+    assert(g.mode.startsWith('practice (') && g.mode.includes('custom hero_demo'), g.mode);
+    equal(g.current(100 + 45), null, 'stale');
+    // it ends without a result
+    const over = {map: {...demo.map, win_team: 'dire'}};
+    deepEqual(g.feed(post('DOTA_GAMERULES_STATE_POST_GAME', over), 200), []);
+    equal(g.current(200), null);
 });
 
 test('in-game Roshan falling is an event', () => {

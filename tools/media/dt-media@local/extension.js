@@ -11,6 +11,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import {Ledger, addDays, dayKey, dayStart, formatClock} from '../dota-time@terentiy/ledger.js';
 import {moodFor} from '../dota-time@terentiy/roshan.js';
+import {GsiServer} from '../dota-time@terentiy/sources.js';
 
 Gio._promisify(Shell.Screenshot.prototype, 'screenshot_area');
 Gio._promisify(Soup.Session.prototype, 'send_and_read_async');
@@ -49,14 +50,28 @@ function hover(card, i) {
     chart.queue_repaint();
 }
 
+let gsiPort = 47570;
+
 async function post(body) {
     const session = new Soup.Session();
-    const msg = Soup.Message.new('POST', 'http://127.0.0.1:47570/');
+    const msg = Soup.Message.new('POST', `http://127.0.0.1:${gsiPort}/`);
     msg.set_request_body_from_bytes('application/json', new GLib.Bytes(new TextEncoder().encode(JSON.stringify(body))));
     await session.send_and_read_async(msg, GLib.PRIORITY_DEFAULT, null);
     return msg.get_status();
 }
 
+
+// A window that looks like Dota to DotaWatcher: GTK 3 names its Wayland app id
+// after the program.
+const FAKE_DOTA = `
+imports.gi.versions.Gtk = '3.0';
+const {GLib, Gtk} = imports.gi;
+GLib.set_prgname('dota2');
+Gtk.init(null);
+const w = new Gtk.Window({title: 'Dota 2', default_width: 200, default_height: 100});
+w.show_all();
+Gtk.main();
+`;
 
 // --- demo data -------------------------------------------------------------------
 
@@ -241,6 +256,11 @@ export default class Media extends Extension {
     async _smoke(me, ind) {
         const box = () => rectOf(ind.menu.box);
         log(`account=${me._state.accountId} gsi=${!!me._gsi}`);
+        // your own dota-time holds 47570: talk to ours elsewhere, never to yours
+        if (!me._gsi) {
+            gsiPort = 47571;
+            me._gsi = new GsiServer(gsiPort, b => me._onPost(b));
+        }
         // OpenDota backfill starts 15 s after enable
         const t0 = now();
         while (!me._state.od.backfillOk && now() - t0 < 60000)
@@ -279,6 +299,11 @@ export default class Media extends Extension {
             hero: {id: 86, name: 'npc_dota_hero_rubick'},
         });
         log(`gsi bad token -> ${await post({auth: {token: 'nope'}})}`);
+        const demo = {map: {matchid: '0', customgamename: 'hero_demo', clock_time: 193}};
+        log(`gsi demo hero -> ${await post(body('DOTA_GAMERULES_STATE_GAME_IN_PROGRESS', demo))}`);
+        await sleep(1500);
+        log(`practice live=${JSON.stringify(me._live(Date.now() / 1000))} mode=${me._game.mode}`);
+        await shot('smoke_practice', box());
         log(`gsi in progress -> ${await post(body('DOTA_GAMERULES_STATE_GAME_IN_PROGRESS'))}`);
         await sleep(1500);
         log(`live=${JSON.stringify(me._live(Date.now() / 1000))} seen=${me._state.gsiSeen}`);
@@ -308,5 +333,25 @@ export default class Media extends Extension {
         me._track();
         log(`back: open=${me._ledger.open} segs=${segs()}`);
         delete me._watcher.running;
+
+        // Dota already open when the extension starts: a lock screen, a shell restart
+        const fake = Gio.Subprocess.new(['gjs', '-c', FAKE_DOTA], Gio.SubprocessFlags.NONE);
+        let win = null;
+        for (let i = 0; i < 100 && !win; i++) {
+            await sleep(100);
+            win = global.get_window_actors().map(a => a.meta_window).find(w => w.get_wm_class() === 'dota2');
+        }
+        log(`fake dota window: ${win ? win.get_wm_class() : 'none'}`);
+        const ext = Main.extensionManager.lookup(UUID);
+        await Main.extensionManager._callExtensionDisable(UUID);
+        log(`disabled: state=${ext.state}`);
+        await Main.extensionManager._callExtensionEnable(UUID);
+        const again = ext.stateObj;
+        log(`re-enabled with dota open: state=${ext.state} error=${ext.error ?? ''} ` +
+            `running=${again._watcher?.running} ledgerOpen=${again._ledger?.open}`);
+        fake.force_exit();
+        await sleep(1500);
+        again._watcher?.poll();
+        log(`fake dota closed: running=${again._watcher?.running}`);
     }
 }
