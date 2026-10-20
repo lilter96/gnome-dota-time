@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Install gjs
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gjs gir1.2-glib-2.0
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends gjs gir1.2-glib-2.0 gir1.2-soup-3.0
       - name: Check metadata
         run: python3 -c "import json; m = json.load(open('dota-time@terentiy/metadata.json')); assert m['uuid'] == 'dota-time@terentiy'"
       - name: Unit tests
