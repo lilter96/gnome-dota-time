@@ -100,6 +100,10 @@ export default class DotaTimeExtension extends Extension {
 
         this._watcher = new DotaWatcher(running => this._onRunning(running));
         this._indicator.glyph.stillWhen = () => this._watcher?.gaming ?? false;
+        this._focusId = global.display.connect('notify::focus-window', () => {
+            this._track();
+            this._refresh();
+        });
         this._checkFlag();
 
         try {
@@ -142,6 +146,7 @@ export default class DotaTimeExtension extends Extension {
         this._track();
         this._save();
         this._indicator.menu.disconnect(this._menuId);
+        global.display.disconnect(this._focusId);
         this._watcher.destroy();
         this._gsi?.destroy();
         this._web.destroy();
@@ -152,20 +157,37 @@ export default class DotaTimeExtension extends Extension {
 
     // --- tracking --------------------------------------------------------------
 
-    // Dota counts while it runs and you are at the computer. Ten minutes
-    // without input outside a match are taken back.
+    // Does now count, and if not while Dota runs, why. A match always counts,
+    // alt-tabbed too; the menu only with Dota in front of you; the demo hero
+    // and practice never.
+    _counting(now) {
+        if (!this._running(now))
+            return {on: false, why: null};
+        if (this._game.inMatch(now))
+            return {on: true, why: null};
+        const live = this._game.current(now);
+        if (live?.practice)
+            return {on: false, why: live.kind};
+        if (!this._watcher.focused)
+            return {on: false, why: 'background'};
+        return {on: true, why: null};
+    }
+
+    // Ten minutes without input outside a match are taken back.
     _track() {
         const now = wallClock();
-        let active = this._running(now);
-        if (active && !this._game.inMatch(now)) {
+        let {on, why} = this._counting(now);
+        if (on && !this._game.inMatch(now)) {
             const idle = global.backend.get_core_idle_monitor().get_idletime() / 1000;
             if (idle >= AFK_LIMIT) {
                 if (this._ledger.open)
                     this._ledger.trim(now - idle);
-                active = false;
+                on = false;
+                why = 'away';
             }
         }
-        this._ledger.track(now, active);
+        this._paused = why;
+        this._ledger.track(now, on);
     }
 
     _tick() {
@@ -326,10 +348,12 @@ export default class DotaTimeExtension extends Extension {
     _model(now) {
         const key = dayKey(now);
         const stats = this._ledger.stats(now);
+        const running = this._running(now);
         return {
             now,
-            running: this._running(now),
+            running,
             live: this._live(now),
+            paused: running ? this._paused : null,
             today: stats.today,
             hourly: this._ledger.hourly(key, now),
             week: this._ledger.series(key, 7, now),
@@ -359,6 +383,7 @@ export default class DotaTimeExtension extends Extension {
         }
         this._shown = today.total;
         ind.time.visible = clock !== '';
+        ind.time.opacity = running && this._paused ? 130 : 255;
         if (mood === 3)
             ind.time.add_style_class_name('dt-panel-aggro');
         else

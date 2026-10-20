@@ -82,6 +82,7 @@ export class GameState {
             this.live = map && hid && state !== POST_GAME ? {
                 id: null,
                 practice: true,
+                kind: practiceKind(map),
                 state,
                 hero: hid,
                 clock: map.clock_time ?? 0,
@@ -154,6 +155,14 @@ export class GameState {
     connected(now) {
         return now - this.lastPost < FRESH;
     }
+}
+
+// Dota runs the demo hero as a custom game: map hero_demo_main, custom game
+// .../dota_addons/hero_demo.
+function practiceKind(map) {
+    if (map.name === 'hero_demo_main' || /hero_demo$/.test(map.customgamename ?? ''))
+        return 'demo';
+    return map.customgamename ? 'custom' : 'practice';
 }
 
 function describe(map, team, hid) {

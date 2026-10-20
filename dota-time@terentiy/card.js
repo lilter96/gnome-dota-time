@@ -18,6 +18,15 @@ const WEEKDAYS = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];
 const MONTHS = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа',
     'сентября', 'октября', 'ноября', 'декабря'];
 const MODES = ['day', 'week', 'month'];
+// Dota is open, but the clock stands
+const PAUSED = {
+    background: 'Дота в фоне, время стоит',
+    away: 'Ты отошёл, время стоит',
+    demo: 'Пробный герой не в счёт',
+    custom: 'Аркада не в счёт',
+    practice: 'Тренировка не в счёт',
+};
+const PRACTICE = {demo: 'Пробный герой', custom: 'Аркада', practice: 'Тренировка'};
 const esc = s => GLib.markup_escape_text(s, -1);
 
 const dateLabel = key => {
@@ -235,14 +244,17 @@ class Card extends St.BoxLayout {
         const left = AGGRO_HOURS * 3600 - total;
         const mood = moodFor(total / 3600);
         let text;
+        const rest = left > 0 ? `до агра ${formatDuration(left)}` : `+${formatDuration(-left)} сверх 4 ч`;
         if (!m.running) {
             text = total < 60 ? 'Рошан спит. Сегодня без Доты'
                 : left > 0 ? `Рошан спит · до агра ${formatDuration(left)}`
                     : `Рошан спит · сегодня было +${formatDuration(-left)} сверх 4 ч`;
+        } else if (m.paused) {
+            text = `${PAUSED[m.paused]} · ${rest}`;
         } else if (mood === 3) {
-            text = `Рошан в агре · +${formatDuration(-left)} сверх 4 ч`;
+            text = `Рошан в агре · ${rest}`;
         } else {
-            text = `${mood === 2 ? 'Рошан ворчит' : 'Рошан следит'} · до агра ${formatDuration(left)}`;
+            text = `${mood === 2 ? 'Рошан ворчит' : 'Рошан следит'} · ${rest}`;
         }
         this._status.text = text;
         for (const [cls, on] of [['dt-status-aggro', mood === 3], ['dt-status-grumpy', mood === 2 && m.running]]) {
@@ -262,7 +274,7 @@ class Card extends St.BoxLayout {
             this._live.add_style_class_name('dt-live-practice');
         else
             this._live.remove_style_class_name('dt-live-practice');
-        const parts = [live.practice ? 'Тренировка' : 'В матче'];
+        const parts = [live.practice ? PRACTICE[live.kind] : 'В матче'];
         if (live.hero)
             parts.push(heroName(live.hero));
         if (live.clock > 0) {

@@ -54,21 +54,28 @@ test('spectating, the menu and custom games are not matches', () => {
     equal(g.current(20), null);
     deepEqual(g.feed(post('DOTA_GAMERULES_STATE_GAME_IN_PROGRESS', {map: {customgamename: 'overthrow'}}), 30), []);
     assert(!g.inMatch(30));
+    equal(g.current(30)?.kind, 'custom');
     assert(g.connected(30), 'but Dota is talking to us');
     assert(!g.connected(100));
 });
 
 test('the demo hero and bots show as practice, never as a match', () => {
     const g = new GameState(TOKEN);
-    const demo = {map: {matchid: '0', customgamename: 'hero_demo', clock_time: 75}, player: {kills: 2}};
+    // what Dota 2 really sends for the demo hero (2026-10)
+    const demo = {
+        map: {name: 'hero_demo_main', matchid: undefined, clock_time: 75,
+            customgamename: '/home/u/.steam/steam/steamapps/common/dota 2 beta/game/dota_addons/hero_demo'},
+        player: {kills: 2},
+    };
     deepEqual(g.feed(post('DOTA_GAMERULES_STATE_GAME_IN_PROGRESS', demo), 100), []);
     assert(!g.inMatch(100), 'AFK still counts in practice');
     const live = g.current(100);
     equal(live?.practice, true);
+    equal(live.kind, 'demo');
     equal(live.hero, 14);
     equal(live.clock, 75);
     equal(live.k, 2);
-    assert(g.mode.startsWith('practice (') && g.mode.includes('custom hero_demo'), g.mode);
+    assert(g.mode.startsWith('practice (map hero_demo_main'), g.mode);
     equal(g.current(100 + 45), null, 'stale');
     // it ends without a result
     const over = {map: {...demo.map, win_team: 'dire'}};

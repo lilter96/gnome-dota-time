@@ -117,6 +117,15 @@ export class DotaWatcher {
         return this._pid > 0;
     }
 
+    // You are looking at Dota, not at something else.
+    get focused() {
+        for (const win of this._windows.keys()) {
+            if (win.has_focus())
+                return true;
+        }
+        return false;
+    }
+
     // Dota fullscreen and focused: nobody sees the panel, keep it still.
     get gaming() {
         for (const win of this._windows.keys()) {

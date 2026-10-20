@@ -316,12 +316,21 @@ export default class Media extends Extension {
         ind.menu.close();
         await sleep(500);
 
-        // Dota running, then ten minutes away from the keyboard
+        // Dota running in the background, then in front of you, then ten minutes away
         Object.defineProperty(me._watcher, 'running', {get: () => true, configurable: true});
+        let focused = false;
+        Object.defineProperty(me._watcher, 'focused', {get: () => focused, configurable: true});
         me._game.lastPost = 0;
         const monitor = global.backend.get_core_idle_monitor();
         log(`idle now ${monitor.get_idletime()} ms`);
         const segs = () => JSON.stringify(me._ledger.segs.slice(-2).map(([a, b]) => [Math.round(a % 10000), Math.round(b % 10000)]));
+        me._track();
+        log(`background: open=${me._ledger.open} paused=${me._paused}`);
+        ind.menu.open();
+        await sleep(1200);
+        await shot('smoke_background', box());
+        ind.menu.close();
+        focused = true;
         me._track();
         await sleep(2000);
         me._track();
@@ -332,7 +341,25 @@ export default class Media extends Extension {
         delete monitor.get_idletime;
         me._track();
         log(`back: open=${me._ledger.open} segs=${segs()}`);
+        // the demo hero, in front of you: still not counted
+        const demoHero = {map: {name: 'hero_demo_main', customgamename: '/x/dota_addons/hero_demo', clock_time: 40}};
+        await post(body('DOTA_GAMERULES_STATE_GAME_IN_PROGRESS', demoHero));
+        await sleep(300);
+        me._track();
+        log(`demo hero: open=${me._ledger.open} paused=${me._paused}`);
+        ind.menu.open();
+        await sleep(1200);
+        await shot('smoke_demo', box());
+        ind.menu.close();
+        // a real match alt-tabbed: counted
+        focused = false;
+        await post(body('DOTA_GAMERULES_STATE_GAME_IN_PROGRESS', {map: {matchid: '5678'}}));
+        await sleep(300);
+        me._track();
+        log(`match alt-tabbed: open=${me._ledger.open} paused=${me._paused}`);
+        me._game.lastPost = 0;
         delete me._watcher.running;
+        delete me._watcher.focused;
 
         // Dota already open when the extension starts: a lock screen, a shell restart
         const fake = Gio.Subprocess.new(['gjs', '-c', FAKE_DOTA], Gio.SubprocessFlags.NONE);
